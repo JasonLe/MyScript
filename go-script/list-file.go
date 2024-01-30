@@ -12,7 +12,6 @@ type File struct {
 	Name    string
 	Suffix  string
 	Size    int64
-	Type    string
 	ModTime string
 }
 
@@ -23,43 +22,48 @@ type Directory struct {
 	Directories []Directory
 }
 
-func GetDicByPath(path string, dic *Directory) {
+func GetDicByPath(path string, dic *Directory) error {
 	files, err := os.ReadDir(path)
 	if err != nil {
-		panic("错误：" + err.Error())
+		return fmt.Errorf("读取目录错误：%w", err)
 	}
 	for _, file := range files {
 		if file.IsDir() {
 			dicPath := filepath.Join(dic.Path, strings.TrimRight(file.Name(), "/"))
-			dicInfo := InitDicInfo(dicPath)
+			dicInfo, err := InitDicInfo(dicPath)
+			if err != nil {
+				return fmt.Errorf("初始化目录信息错误：%w", err)
+			}
 			GetDicByPath(dicPath, &dicInfo)
 			dic.Directories = append(dic.Directories, dicInfo)
 		} else {
 			InitFileInfo(file, dic)
 		}
 	}
+	return nil
 }
 
-func InitDicInfo(path string) Directory {
+func InitDicInfo(path string) (Directory, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		panic("错误：" + err.Error())
+		return Directory{}, fmt.Errorf("获取目录信息错误：%w", err)
 	}
-	var dic = Directory{
+	dic := Directory{
 		Name:        info.Name(),
 		Path:        path,
-		Files:       make([]File, 0),
-		Directories: make([]Directory, 0),
+		Files:       []File{},
+		Directories: []Directory{},
 	}
-	return dic
+	return dic, nil
 }
+
 func InitFileInfo(file os.DirEntry, dic *Directory) {
-	fileInfo, _ := file.Info()
-	str := strings.Split(fileInfo.Name(), ".")
-	suffix := ""
-	if cap(str) > 1 {
-		suffix = str[len(str)-1]
+	fileInfo, err := file.Info()
+	if err != nil {
+		fmt.Printf("获取文件信息错误：%v\n", err)
+		return
 	}
+	suffix := filepath.Ext(fileInfo.Name())
 	f := File{
 		Name:    fileInfo.Name(),
 		Suffix:  suffix,
@@ -70,9 +74,9 @@ func InitFileInfo(file os.DirEntry, dic *Directory) {
 }
 
 func (dic Directory) PrintDic() {
-	fmt.Printf("文件夹:{ 名称:: %s 路径: %s}\n", dic.Name, dic.Path)
+	fmt.Printf("【名称】: %s 【路径】: %s \n", dic.Name, dic.Path)
 	for _, f := range dic.Files {
-		fmt.Printf("-------- 文件:{ 【名称】: %s 【后缀】: %s 【大小】: %d MB 【修改时间】: %v }\n", f.Name, f.Suffix, f.Size, f.ModTime)
+		fmt.Printf("-------- 【名称】: %s 【后缀】: %s 【大小】: %d MB 【修改时间】: %v \n", f.Name, f.Suffix, f.Size, f.ModTime)
 	}
 	for _, subDir := range dic.Directories {
 		subDir.PrintDic()
@@ -85,12 +89,17 @@ func main() {
 	flag.Parse()
 
 	if dirPath == "" {
-		panic("ERROR: 请输入文件夹路径")
+		fmt.Println("ERROR: 请输入文件夹路径")
+		return
 	}
 	dic := Directory{
 		Name: dirPath,
 		Path: dirPath,
 	}
-	GetDicByPath(dirPath, &dic)
+	err := GetDicByPath(dirPath, &dic)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	dic.PrintDic()
 }
